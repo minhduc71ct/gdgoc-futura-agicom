@@ -1,3 +1,4 @@
+/* ===== CSS Custom Properties ===== */
 :root {
     --bg-primary: #fef9c3;
     --bg-secondary: #ffffff;
@@ -39,4 +40,17 @@
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.1);
     --shadow-glow: 0 0 20px rgba(250, 204, 21, 0.4);
     --shadow-glow-success: 0 0 20px rgba(52, 211, 153, 0.2);
-    --shadow
+    --shadow-glow-danger: 0 0 20px rgba(251, 113, 133, 0.2);
+
+    --sidebar-width: 260px;
+    --header-height: 70px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
