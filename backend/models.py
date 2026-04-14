@@ -1,6 +1,11 @@
 from pydantic import BaseModel
 from typing import List
 
+class ShopProfile(BaseModel):
+    target_customers: str = "Khách hàng phổ thông"
+    strategic_vision: str = "Tối ưu lợi nhuận dài hạn"
+    brand_tone: str = "Chuyên nghiệp, nhiệt tình"
+
 class InternalData(BaseModel):
     current_price: float
     stock_level: int
@@ -49,11 +54,12 @@ class GuardrailResponse(BaseModel):
     flag_reason: str         # Lý do nếu bị cờ (ví dụ: Khách chửi bới, đòi giảm giá)
 
 class StrategyProposal(BaseModel):
+    action_required: bool            # AI decide if update is necessary
     proposed_price: float
     expected_margin_percent: float
     pricing_reasoning: str
     content_update_suggestion: str
-    urgency_level: str  # "High" (Cần duyệt gấp), "Medium", "Low"
+    urgency_level: str  # "None", "High", "Medium", "Low"
 
 class ProductRequest(BaseModel):
     product_id: str
@@ -61,4 +67,5 @@ class ProductRequest(BaseModel):
     internal_data: InternalData
     market_data: MarketData
     customer_context: CustomerContext
+    shop_profile: ShopProfile        # Personalization input
     manager_directive: str = "Không có chỉ thị đặc biệt"

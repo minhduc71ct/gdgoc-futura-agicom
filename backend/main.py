@@ -6,7 +6,7 @@ from google.genai import types
 from config import client
 from models import (
     IncomingData, ProposalApproval, ChatMessage, ProductRequest,
-    GuardrailResponse, StrategyProposal
+    GuardrailResponse, StrategyProposal, ShopProfile
 )
 from prompts import CHAT_SYSTEM_PROMPT, STRATEGY_SYSTEM_PROMPT
 from services import analyze_strategy_slow_track, customer_care_fast_track
@@ -71,18 +71,23 @@ async def human_approval_flow(approval: ProposalApproval):
         return {"status": "Re-evaluating", "message": "Đang tính toán lại dựa trên phản hồi của bạn"}
 
 @app.post("/fast-track-chat")
-async def process_customer_chat(chat: ChatMessage):
+async def process_customer_chat(chat: ChatMessage, profile: ShopProfile): # Assume profile passed from frontend
     try:
+        # Inject Tone and Target Customers
+        personalized_chat_prompt = CHAT_SYSTEM_PROMPT.format(
+            brand_tone=profile.brand_tone,
+            target_customers=profile.target_customers
+        )
+
         user_prompt = f"Chính sách shop: {chat.shop_policy}\nTin nhắn của khách: '{chat.customer_text}'"
 
-        # Gọi Gemini xử lý luồng Chat
         response = await client.aio.models.generate_content(
             model="gemini-flash-latest",
-            contents=[CHAT_SYSTEM_PROMPT, user_prompt],
+            contents=[personalized_chat_prompt, user_prompt],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=GuardrailResponse,
-                http_options={'timeout': 30000} # Chat cần phản hồi nhanh hơn Slow Track
+                http_options={'timeout': 30000} # GIỮ NGUYÊN 30S
             )
         )
 
@@ -115,34 +120,41 @@ async def process_customer_chat(chat: ChatMessage):
 @app.post("/slow-track-strategy")
 async def process_market_strategy(product: ProductRequest):
     try:
-        # Gom toàn bộ dữ liệu thành "Hồ sơ" đưa cho AI
+        # Inject personalization into the prompt
+        personalized_system_prompt = STRATEGY_SYSTEM_PROMPT.format(
+            strategic_vision=product.shop_profile.strategic_vision,
+            target_customers=product.shop_profile.target_customers
+        )
+
         user_prompt = f"Hồ sơ dữ liệu sản phẩm hiện tại: {product.model_dump_json()}"
 
-        # Gọi Gemini xử lý luồng chậm (Thời gian suy nghĩ lâu hơn)
+        # Keep your existing structure and timeouts
         response = await client.aio.models.generate_content(
             model="gemini-flash-latest",
-            contents=[STRATEGY_SYSTEM_PROMPT, user_prompt],
+            contents=[personalized_system_prompt, user_prompt],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=StrategyProposal,
-                http_options={'timeout': 60000} # Cho phép AI nghĩ tới 60 giây
+                http_options={'timeout': 60000} # 60s timeout
             )
         )
 
         if not response.text:
             raise HTTPException(status_code=500, detail="Lỗi phản hồi từ AI.")
             
+        # GIỮ NGUYÊN LOGIC CLEAN TEXT
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
         strategy_result = json.loads(clean_text)
 
-        # BẮT BUỘC LUỒNG SLOW TRACK PHẢI QUA HUMAN-IN-THE-LOOP
+        # New Logic: Routing based on "Action Required"
+        routing_msg = "Sent to Dashboard for Human Approval" if strategy_result.get("action_required") else "No Action Needed - Monitored"
+
         return {
             "status": "success",
-            "routing_action": "Sent to Dashboard for Human Approval",
+            "routing_action": routing_msg,
             "proposal_id": f"PROP-{product.product_id}-001",
             "data": strategy_result
         }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
