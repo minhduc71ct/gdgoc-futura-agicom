@@ -200,5 +200,27 @@ window.editChatDraft = function (idx) {
     }
 };
 
+window.switchPolicyTab = function (platform, btnEl) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+    const title = document.getElementById('policyCardTitle');
+    const acc = document.getElementById('policyAccordion');
+
+    if (platform === 'shopee') {
+        title.textContent = 'Tóm tắt Quy Chế Shopee (Rút trích tự động bởi AI)';
+        acc.innerHTML = `
+      <div class="accordion-item">
+        <button class="accordion-header" onclick="this.nextElementSibling.classList.toggle('open')">1. Giao nhận Vận Chuyển</button>
+        <div class="accordion-body"><div class="accordion-content">Nhanh/Tiết kiệm tốn 1-4 ngày, Hỏa tốc 1-2H.</div></div>
+      </div>`;
+    } else {
+        title.textContent = 'Tóm tắt TikTok Shop Content Policy (AI)';
+        acc.innerHTML = `
+      <div class="accordion-item">
+        <button class="accordion-header" onclick="this.nextElementSibling.classList.toggle('open')">1. Nội dung Cấm</button>
+        <div class="accordion-body"><div class="accordion-content">Tuyệt đối cấm hứa hẹn may rủi/ phần thưởng.</div></div>
+      </div>`;
+    }
+}
 // Khởi chạy App
 document.addEventListener('DOMContentLoaded', init);
