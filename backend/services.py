@@ -86,16 +86,18 @@ async def customer_care_fast_track(data: dict):
         return {"track": "Fast Track", "status": "Error parsing JSON"}
 
 async def cskh_rag_service(customer_text: str, brand_tone: str):
-    # Tìm top 3 kết quả thay vì 1
-    policy_hits = policy_col.query(query_texts=[customer_text], n_results=3)
-    product_hits = product_col.query(query_texts=[customer_text], n_results=3)
+    # 1. Tìm kiếm ở CẢ 3 KHO (Policy, Product và Resolved_QA)
+    policy_hits = policy_col.query(query_texts=[customer_text], n_results=2)
+    product_hits = product_col.query(query_texts=[customer_text], n_results=2)
+    # THÊM DÒNG NÀY: Truy vấn kho kiến thức đã học từ con người
+    qa_hits = resolved_qa_col.query(query_texts=[customer_text], n_results=2)
     
-    # Gộp tất cả các kết quả tìm được thành 1 đoạn văn bản
     def get_all_hits(hits):
         if hits and hits.get('documents') and len(hits['documents'][0]) > 0:
-            return "\n- ".join(hits['documents'][0]) # Nối các kết quả bằng dấu gạch đầu dòng
+            return "\n- ".join(hits['documents'][0])
         return "Không có thông tin cụ thể."
 
+    # 2. CẬP NHẬT CONTEXT: Đưa thêm phần "Kinh nghiệm giải đáp" vào
     context = f"""
     CÁC THÔNG TIN TÌM THẤY:
     Về quy định: 
@@ -103,14 +105,17 @@ async def cskh_rag_service(customer_text: str, brand_tone: str):
     
     Về sản phẩm: 
     - {get_all_hits(product_hits)}
+
+    Kinh nghiệm giải đáp trước đây (Rất quan trọng):
+    - {get_all_hits(qa_hits)}
     """
     
-    # Debug: In ra terminal để bạn xem AI đang được đọc những gì
-    print("--- CONTEXT AI NHẬN ĐƯỢC ---")
+    # Debug: In ra để bạn kiểm tra xem "Kinh nghiệm giải đáp" có hiện ra không
+    print("--- CONTEXT GỬI CHO AI ---")
     print(context)
-    print("----------------------------")
+    print("--------------------------")
 
-    # 2. GENERATION: Gọi Gemini tạo câu trả lời
+    # 3. GENERATION: Gửi context đã tổng hợp cho Gemini
     user_prompt = CHAT_RAG_PROMPT.format(context=context, brand_tone=brand_tone)
     
     response = await client.aio.models.generate_content(
@@ -120,6 +125,18 @@ async def cskh_rag_service(customer_text: str, brand_tone: str):
     )
     
     result = json.loads(response.text)
+
+    # ... (giữ nguyên phần sensor_insight và coordinate_agents bên dưới)
+    if result.get("sensor_insight"):
+        await coordinate_agents(result["sensor_insight"], "A56")
+        print(f"[!] SENSOR ALERT: {result['sensor_insight']}")
+
+    return result
+
+    # Sau khi nhận kết quả từ Gemini
+    if result.get("sensor_insight"):
+        # Tự động kích hoạt luồng điều phối
+        await coordinate_agents(result["sensor_insight"], "A56")
     
     # 3. COORDINATION (Hành động của Cảm biến tiền phương)
     if result.get("sensor_insight"):
@@ -131,15 +148,59 @@ async def cskh_rag_service(customer_text: str, brand_tone: str):
 
 async def learn_from_human_service(customer_q: str, human_a: str):
     """Lưu cặp Q&A đã được con người duyệt vào Vector DB"""
-    # Dùng LLM để format lại cho 'sạch' trước khi lưu
-    prompt = LEARNING_EXTRACTOR_PROMPT.format(chat_log=f"Q: {customer_q}, A: {human_a}")
-    response = await client.aio.models.generate_content(model="gemini-flash-latest", contents=prompt)
+    try:
+        # 1. Chuẩn bị Prompt
+        prompt = LEARNING_EXTRACTOR_PROMPT.format(chat_log=f"Q: {customer_q}, A: {human_a}")
+        
+        # 2. Gọi Gemini (Thêm config response_mime_type để ép AI trả về JSON)
+        response = await client.aio.models.generate_content(
+            model="gemini-flash-latest", 
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+        
+        if not response.text:
+            raise HTTPException(status_code=500, detail="AI không trả về kết quả để học.")
+
+        # 3. LÀM SẠCH TEXT (Quan trọng: Xử lý lỗi JSONDecodeError)
+        clean_text = response.text.replace("```json", "").replace("```", "").strip()
+        
+        # 4. Parse JSON và lưu vào DB
+        data = json.loads(clean_text)
+        
+        # Tạo ID duy nhất bằng cách băm nội dung câu hỏi
+        import hashlib
+        doc_id = hashlib.md5(data['question'].encode()).hexdigest()
+
+        resolved_qa_col.add(
+            documents=[f"Q: {data['question']} A: {data['answer']}"],
+            ids=[f"qa_{doc_id}"]
+        )
+        
+        print(f"[*] Đã học thành công kiến thức mới: {data['question']}")
+        return {"status": "Learned successfully", "data_saved": data}
+
+    except json.JSONDecodeError as e:
+        print(f"LỖI PARSE JSON: {response.text}")
+        raise HTTPException(status_code=500, detail="AI trả về format JSON không hợp lệ.")
+    except Exception as e:
+        print(f"LỖI HỌC TẬP: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def coordinate_agents(insight_text: str, product_id: str):
+    """
+    Dựa vào insight từ CSKH để tạo 'Task' cho các Agent khác.
+    """
+    insight_text = insight_text.lower()
     
-    data = json.loads(response.text)
-    
-    # Lưu vào ChromaDB
-    resolved_qa_col.add(
-        documents=[f"Q: {data['question']} A: {data['answer']}"],
-        ids=[f"qa_{hash(data['question'])}"]
-    )
-    return {"status": "Learned successfully"}
+    # 1. Nếu insight liên quan đến GIÁ
+    if any(word in insight_text for word in ["giá", "đắt", "rẻ", "chi phí", "giảm giá"]):
+        print(f"[Trigger] -> Gửi yêu cầu cho PRICING AGENT: Kiểm tra lại giá mã {product_id}")
+        # Logic: Gọi hàm analyze_strategy_slow_track() hoặc đánh dấu flag cho bộ phận giá
+        
+    # 2. Nếu insight liên quan đến THÔNG TIN/MÀU SẮC (Thiếu hàng)
+    if any(word in insight_text for word in ["màu", "không có", "hỏi thêm", "thông tin"]):
+        print(f"[Trigger] -> Gửi yêu cầu cho CONTENT AGENT: Cập nhật mô tả sản phẩm {product_id}")
+        # Logic: Tạo một yêu cầu sửa bài đăng trên sàn

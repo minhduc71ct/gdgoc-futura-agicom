@@ -188,6 +188,27 @@ async def human_feedback(customer_q: str, human_a: str):
     """API để chủ shop 'dạy' AI khi họ sửa câu trả lời trên Dashboard"""
     return await learn_from_human_service(customer_q, human_a)
 
+@app.get("/daily-summary")
+async def get_daily_summary():
+    """
+    Tổng hợp các insight mà Agent CSKH đã thu thập được trong ngày
+    để báo cáo cho chủ shop.
+    """
+    # Trong thực tế, bạn sẽ lưu các sensor_insight này vào một bảng SQL (vd: SQLite/PostgreSQL)
+    # Ở bản Demo, ta có thể giả lập hoặc lấy từ logs.
+    return {
+        "date": "2024-05-20",
+        "top_insights": [
+            "5 khách hàng hỏi màu Đỏ cho A56 (Hiện không có)",
+            "3 khách hàng chê phí ship nội thành cao",
+            "Đã điều hướng thành công 2 khách sang mẫu A57"
+        ],
+        "recommendations": [
+            "Cần bổ sung ảnh bản màu Xanh của A56 lên đầu trang",
+            "Cân nhắc chương trình Freeship cho dòng A57 để đẩy hàng"
+        ]
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
