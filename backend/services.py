@@ -3,7 +3,7 @@ import json
 from fastapi import HTTPException
 from google.genai import types
 from config import policy_col, product_col, resolved_qa_col, client
-from prompts import DATA_ANALYST_PROMPT, CHAT_RAG_PROMPT, LEARNING_EXTRACTOR_PROMPT
+from prompts import DATA_ANALYST_PROMPT, CHAT_RAG_PROMPT, LEARNING_EXTRACTOR_PROMPT, STRATEGY_SYSTEM_PROMPT
 from models import MarketInsight
 from database import SessionLocal, CoordinationTask, ChatLog
 
