@@ -8,7 +8,9 @@ from models import MarketInsight
 from database import SessionLocal, CoordinationTask, ChatLog
 
 def fetch_raw_market_data(sku_id: str) -> dict:
-    file_path = f"backend/mock_data/{sku_id}-raw.json"
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(BASE_DIR, "mock_data", f"{sku_id}-raw.json")
+    
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail=f"Không tìm thấy file: {file_path}")
     with open(file_path, "r", encoding="utf-8") as f:
